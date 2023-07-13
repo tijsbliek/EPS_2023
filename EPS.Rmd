@@ -1,0 +1,291 @@
+---
+  title: "assignment1"
+author: "TB"
+date: "2/10/2020"
+output: html_document
+---
+  
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+Goal for assignment 1.
+
+Your assignment is to compare the expression of plants grown at 0 g (spaceflight) and 1 g (ground control)
+
+
+the needed files can be found in https://github.com/tijsbliek/EPS_2023/tree/main/assignment
+
+The data is read into R
+
+
+next with the use of a pca plot, ma plot, heatmap and the results table you should be able to get an impression on the (relative) expression and differentials in the dataset. 
+
+
+First step is to activate the packages needed; dplyr, DESeq2, EnhancedVolcano and pheatmap.
+
+```{r}
+library(dplyr)
+library(DESeq2)
+library(pheatmap)
+library(gplots)
+```
+
+
+
+
+Creating the DESeqDataSet object.
+
+Importing the count file and the experimental design file required to build a DESeqDataSet object from input tables.
+
+
+import counts (use read.table()to store the counts data from the GLDS38_raw_counts.txt file) 
+specify the genenames (first column) to be the rownames (with row.names=1) and column names to be the samles (header = TRUE).
+
+```{r}
+#if needed, get to the folder containing the data (setwd())
+setwd("assignment/")
+# import counts and create list of genes, first column = rownames(genes), first row is the column names (samples)
+countdata <- read.table("GLDS38_raw_counts.txt", header=TRUE,row.names=1,stringsAsFactors = F, check.names = F)
+
+# show first 10 rows
+head(countdata, n=10)
+
+
+```
+
+Use the function dim() to see how many geners and samples you have
+
+```{r}
+dim(countdata)
+```
+
+
+
+Import experimental design (again make use of useread.delim() from the file samples_to_condition.txt )
+set column 1 to be the rownames and the condition the columnnames
+
+
+```{r}
+
+#if needed, get to the folder containing the data (setwd())
+setwd("assignment/")
+
+#import experimental design change col names
+xp_design <- read.table("samples_to_condition.txt", header=TRUE, row.names=1, stringsAsFactors = F, check.names = F)
+ 
+# show the experimental design using print()
+print(xp_design)
+
+```
+
+
+
+We now have everything we need to create the dds object that will be used through the rest of this episode.
+
+Let’s perform a last check before this. We should always make sure that we have sample names that match between the two files, and that the samples are in the right order. DESeq2 will output an error if this is not the case.
+
+```{r}
+
+
+## Check that sample names match in both files
+all(colnames(countdata) %in% rownames(xp_design))
+all(colnames(countdata) == rownames(xp_design))
+
+
+```
+
+
+
+Creation of the DESeqDataSet (dds)
+function is DESeqDataSetFromMatrix() with the arguments: colData = xp_design and design = ~ condition
+
+```{r}
+
+# list of conditions ea the condion column from xp_design.
+condition <- xp_design$condition
+
+# Creation of the DESeqDataSet
+dds <- DESeqDataSetFromMatrix(countData = countdata, 
+                              colData = xp_design, 
+                              design = ~ condition)
+
+# show the firts lines using head()
+head(dds)
+```
+
+
+
+PCA plot
+
+For a PCA plot the plotPCA() function included in the DESeq2 package, will need to be used.
+First a variance-stabilizing transformation will need to be done, and next run the plotPCA() will be done using the conditions of interest (seed, infected, and dpi) 
+
+
+```{r}
+
+```
+
+
+
+
+
+
+MA-plot
+
+To check the quality of the data plot the mean values VS the variation for each of the genes.
+
+
+```{r}
+
+z_var <- apply(countdata, 1, var)
+z_mean <- apply(countdata, 1, mean)
+plot(log2(z_mean), log2(z_var), pch='.')
+
+
+```
+
+
+Differential gene expression analysis will consist of simply two lines of code:
+
+1.  The first will call the DESeq function on a DESeqDataSet object that you’ve just created under the name dds. It will be returned under the same R object name dds.
+2.  Then, normalized counts are extracted using the counts function on the dds object and results will be extracted as a table under the name counts_normalized.
+
+```{r}
+# run the DESeq function
+dds <- DESeq(dds)
+
+# get table of normalised counds as matrix for later use
+counts_normalized <- as.data.frame(counts(dds, normalized=TRUE))
+
+# visualize the first using head()
+head(counts_normalized)
+```
+
+
+Table containing the results.
+
+differential expression results are extracted using the results function on the dds object and results will be extracted as a table under the name DE_data.
+
+```{r}
+# extract the differential expression results
+DE_data <- results(dds)  
+
+# visualize the first using head()
+head(DE_data)
+
+```
+
+
+Additional information on the DESeqResult columns is available using the mcols() function.
+```{r}
+mcols(DE_data)
+```
+
+
+False discovery rates
+The selected α threshold controls for type I error rate: rejecting the null hypothesis (“there is no difference”) while it is true. This α value is often set at at α = 0.05 (5%), α = 0.01 (1%) or α = 0.001 (0.1%).
+
+When you perform thousands of statistical tests (one for each gene), you will by chance call genes differentially expressed while they are not (false positives). You can control this by applying certain statistical procedures called multiple hypothesis test correction.
+
+We can count the number of genes that are differentially regulated at a certain α level.
+
+
+```{r}
+# how many genes differentially regulated ?
+# threshold of p = 0.01
+DE_data %>%
+as.data.frame() %>%
+filter(padj < 0.01) %>%
+filter(log2FoldChange > 2) %>%
+dim()
+# threshold of p = 0.001
+DE_data %>%
+as.data.frame() %>%
+filter(padj < 0.001) %>%
+##filter(log2FoldChange > 2) %>%
+dim()
+```
+
+
+
+Volcano plot
+
+For each gene, this plot shows the gene fold change on the x-axis against the p-value plotted on the y-axis.
+
+Here, we make use of a library called EnhancedVolcano which is available through Bioconductor and described extensively on its own GitHub page.
+
+We can build this plot rapidly without much customization.
+
+```{r}
+dim(counts_normalized)
+
+```
+
+
+
+######### 
+# Heatmap
+#########
+
+First make a selection of genes you want to visualize in the heatmap (based on padj, log2foldchange or both)
+
+use the function pheatmap() to create the heatmap.
+
+```{r}
+genes_differential_fold <-
+DE_data %>%
+as.data.frame() %>%
+mutate(gene = row.names(res)) %>%
+filter(padj < 0.01) %>%
+filter(log2FoldChange > 1.5) %>%
+select(gene)
+
+dim(genes_differential_fold)
+
+counts_normalised_only_diff_fold = counts_normalized[row.names(counts_normalized) %in% genes_differential_fold$gene, ]
+# cluster genes and samples
+
+pheatmap(counts_normalised_only_diff_fold)
+
+```
+
+
+To make the picture more readable the counts need to be scaled (and centered around zero)
+
+Next the scaling is done with the scale() function
+
+If your list is too long, take a subset (the first 50), because the complete set will give an unreadable picture.
+
+If you want the x and y-axis to not be clustered, add cluster_rows = F, cluster_cols = F
+
+```{r}
+
+# The main function is named after the package
+z <- as.matrix((counts_normalised_only_diff_fold))
+
+# scaling the data to avoid clustering based on expression level
+scaledata <- t(scale(t(z))) # Centers and scales data.
+scaledata <- scaledata[complete.cases(scaledata),]  
+
+
+pheatmap(scaledata, cluster_rows = T, cluster_cols = T)
+```
+
+
+
+
+Write the results to new files.
+
+```{r}
+
+write.table(counts_normalized, file="counts_nornalized.txt", sep = "\t",quote=F,row.names=T)
+write.table(DE_data, file="DE_data.txt", sep = "\t",quote=F,row.names=T)
+write.table(counts_normalised_only_diff_fold, file="DE_genes.txt", sep = "\t",quote=F,row.names=T)
+
+```
+
+
+Open the file in excel and check interesting (lists of) genes in arabidopsis.org and or shinyGO (http://bioinformatics.sdstate.edu/go/)
+
